@@ -1,18 +1,18 @@
 temp_inv = {}
 
 -- formspec setup
-local function get_treasure_chest_formspec(pos)
-	local spos = pos.x .. "," .. pos.y .. "," ..pos.z
+local function get_treasure_chest_formspec(pos, taker)
+	local spos = pos.x .. "," .. pos.y .. "," .. pos.z
 	local formspec =
-		"size[8,9]"..
-		default.gui_bg..
-		default.gui_bg_img..
-		default.gui_slots..
-		"list[nodemeta:".. spos .. ";main;0,0.3;8,4;]"..
-		"list[current_player;main;0,4.85;8,1;]"..
-		"list[current_player;main;0,6.08;8,3;8]"..
-		"listring[nodemeta:".. spos .. ";main]"..
-		"listring[current_player;main]"..
+		"size[8,9]" ..
+		default.gui_bg ..
+		default.gui_bg_img ..
+		default.gui_slots ..
+		"list[nodemeta:" .. spos .. ";" .. taker .. ";0,0.3;8,4;]" ..
+		"list[current_player;main;0,4.85;8,1;]" ..
+		"list[current_player;main;0,6.08;8,3;8]" ..
+		"listring[nodemeta:" .. spos .. ";" .. taker .. "]" ..
+		"listring[current_player;main]" ..
 		default.get_hotbar_bg(0,4.85)
  return formspec
 end
@@ -44,9 +44,10 @@ minetest.register_node("treasurechest:empty", {
 	after_place_node = function(pos, placer)
 		local meta = minetest.get_meta(pos)
 		local inv = meta:get_inventory()
-		meta:set_string("owner", placer:get_player_name() or "")
-		meta:set_string("infotext", "Treasure Chest (owned by "..meta:get_string("owner")..")")
-		inv:set_size("main", 8*8)
+		local giver = placer:get_player_name()
+		meta:set_string("owner", giver or "")
+		meta:set_string("infotext", "Treasure Chest (owned by "..giver..")")
+		inv:set_size(giver, 8*4)
 	end,
 
 	-- only allow owner to remove chest
@@ -78,22 +79,7 @@ minetest.register_node("treasurechest:empty", {
 		return stack:get_count()
 	end,
 
-	-- saves items to chest when punched by owner
-	on_punch = function(pos, node, player, pointed_thing)
-		local meta = minetest.get_meta(pos)
-		local puncher = player:get_player_name() 
-		local giver = meta:get_string("owner")
-		local inv = meta:get_inventory()		
-		if puncher == giver then
-			for i=1,32 do
-				temp_inv = inv:get_stack("main", i)
-				inv:set_stack("main", i+32, temp_inv)
-			end
-			minetest.chat_send_player(puncher, "Treasure Chest contents successfully saved.")						
-		end	
-	end,
-
-	-- checks if player has examined contents of chest and if not, allows them to remove items
+	-- checks if player has previously examined contents of chest and allows them to remove available items
 	-- also allows owner to add items to chest
  	on_rightclick = function(pos, node, clicker)
 		local meta = minetest.get_meta(pos)		
@@ -101,24 +87,22 @@ minetest.register_node("treasurechest:empty", {
 		local giver = meta:get_string("owner")
 		local taken = meta:get_string(taker)
 		local inv = meta:get_inventory()
-		if taken == "yes" and taker ~=giver then
-			minetest.chat_send_player(taker, "Sorry "..taker..", you've already examined this treasure chest.")
-		else
+		-- if first time examining chest, creates new inventory, copying the owner's inventory
+		if taken ~= "yes" then
+			inv:set_size(taker, 8*4)		
 			for i=1,32 do
-				temp_inv = inv:get_stack("main", i+32)
-				inv:set_stack("main", i, temp_inv)
+				temp_inv = inv:get_stack(giver, i)
+				inv:set_stack(taker, i, temp_inv)
 			end	
-			minetest.show_formspec(
-				clicker:get_player_name(),
-				"treasurechest:empty",
-				get_treasure_chest_formspec(pos)
-			)
+			meta:set_string(taker, "yes")		
 		end
-		meta:set_string(taker, "yes")		
-		if taker == giver then
-			minetest.chat_send_player(taker, "Remember to punch the Treasure Chest to save its contents!")			
-		end
+		minetest.show_formspec(
+			taker,
+			"treasurechest:empty",
+			get_treasure_chest_formspec(pos, taker)
+		)	
 	end,
+	
 })
 
 print("[Mod]treasurechest Loaded!")
